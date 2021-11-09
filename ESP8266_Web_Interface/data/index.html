@@ -1,0 +1,45 @@
+<html>
+  <head>
+    <title>Internet RFID Shelf</title>
+  </head>
+  Current inventory: <label id="count">Loading...</label>
+  <br>
+  Inventory status: <label id="status">Loading...</label>
+  <script>
+    var global_min = 1;
+    var global_count = 0;
+
+    setInterval(update, 1000);
+    function update(){
+      httpGetAsync('./inventory', updatePage);
+      httpGetAsync('./minimum', updateMinimum)
+    }
+
+    //From https://stackoverflow.com/questions/247483/http-get-request-in-javascript
+    function httpGetAsync(theUrl, cb)
+    {
+        var xmlHttp = new XMLHttpRequest();
+        xmlHttp.onreadystatechange = function() {
+            if (xmlHttp.readyState == 4 && xmlHttp.status == 200)
+                //console.log(xmlHttp.responseText);
+                cb(xmlHttp.responseText);
+        }
+        xmlHttp.open("GET", theUrl, true); // true for asynchronous
+        xmlHttp.send(null);
+    }
+
+    function updatePage(content){
+      console.log("Got inventory: " + content);
+      global_count = content;
+      if(content != document.getElementById("count").innerHTML){
+      document.getElementById("count").innerHTML=content;
+      }
+    }
+
+    function updateMinimum(content){
+      console.log("Got minimum: " + content);
+      global_min = content;
+      document.getElementById("status").innerHTML = (global_count < global_min) ? "LOW" : "OK";
+    }
+  </script>
+</html>
