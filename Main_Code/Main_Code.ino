@@ -6,9 +6,12 @@
 int mode = MODE_ADD;
 
 int count = 0;
-int min_inventory = 2;
+int min_inventory = 4;
 #define BUZZER_PIN 37
-
+//Front sensor enable pin
+#define RFID_1_ENABLE 42
+//Rear sensor enable pin
+#define RFID_2_ENABLE 44
 
 //Adapted from https://raw.githubusercontent.com/ellensp/rrd-glcd-tester/master/rrd-glcd-test.ino
 #define DOGLCD_CS       16
@@ -32,8 +35,8 @@ void setup() {
   u8g.setFont(u8g_font_helvR08);
   u8g.setColorIndex(1);
 }
-byte inventory_status[] = {0, 0, 0, 0, 0};
-byte inventory_items = 5;
+byte inventory_status[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+byte inventory_items = 15;
 bool inventory_update = true;
 void loop() {
   if (Serial.available() > 0) {
@@ -46,7 +49,7 @@ void loop() {
       mode = MODE_REMOVE;
     }
   }
-  int new_tag = checkRFID();
+  int new_tag = checkRFID1();
   if (new_tag != -1) {
     //A tag was scanned.
     if (mode == MODE_ADD) {
@@ -66,7 +69,7 @@ void loop() {
     inventory_update = false;
     Serial.println("Inventory updated:");
     count = 0;
-    for (int i = 0; i < inventory_items; i++) {
+    for (int i = 0; i < inventory_items+1; i++) {
       count += inventory_status[i];
     }
     Serial.print(count);
@@ -96,24 +99,57 @@ void loop() {
 
 void initRFID() {
   Serial3.begin(2400);
+  Serial2.begin(2400);
+  pinMode(RFID_1_ENABLE, OUTPUT);
+  digitalWrite(RFID_1_ENABLE, HIGH);
+  pinMode(RFID_2_ENABLE, OUTPUT);
+  digitalWrite(RFID_2_ENABLE, HIGH);
 }
 
 byte tag[13];
 
-int checkRFID() {
+//Front scanner
+int checkRFID1() {
+  //Enable the RFID sensor and give it 50ms to power up
+  digitalWrite(RFID_1_ENABLE, LOW);
+  delay(50);
   if (Serial3.available() >= 12) {
     Serial3.readBytes(tag, 12);
-    //Serial.print("Got tag: ");
+    Serial.print("Got tag on front scanner: ");
     for (int i = 0; i < 12; i++) {
-      //Serial.print(tag[i], HEX);
+      Serial.print(tag[i], HEX);
     }
-    //Serial.println();
+    Serial.println();
+    Serial.print("Tag is: ");
+    int result = tag_search();
+    Serial.println(result);
+    beep();
+    digitalWrite(RFID_1_ENABLE, HIGH);
+    return result;
+  }
+  digitalWrite(RFID_1_ENABLE, HIGH);
+  return -1;
+}
+
+int checkRFID2() {
+  //Enable the RFID sensor and give it 50 ms to power up
+  digitalWrite(RFID_2_ENABLE, LOW);
+  delay(50);
+  if (Serial2.available() >= 12) {
+    Serial2.readBytes(tag, 12);
+    Serial.print("Got tag on rear scanner: ");
+    for (int i = 0; i < 12; i++) {
+      Serial.print(tag[i], HEX);
+    }
+    Serial.println();
     //Serial.print("Tag is: ");
     int result = tag_search();
     //Serial.println(result);
     beep();
+    digitalWrite(RFID_2_ENABLE, HIGH);
     return result;
   }
+  digitalWrite(RFID_2_ENABLE, HIGH);
   return -1;
 }
 
@@ -138,10 +174,21 @@ byte tag_array[][14] = {
   {0x01, 0xA, 0x30, 0x38, 0x30, 0x30, 0x32, 0x46, 0x45, 0x35, 0x41, 0x32, 0xD}, //White tag
   {0x02, 0xA, 0x33, 0x35, 0x30, 0x32, 0x31, 0x44, 0x43, 0x36, 0x33, 0x32, 0xD}, //Blue keychain
   {0x03, 0xA, 0x31, 0x31, 0x30, 0x30, 0x36, 0x38, 0x43, 0x33, 0x43, 0x43, 0xD}, //White circle
-  {0x04, 0xA, 0x30, 0x31, 0x30, 0x44, 0x35, 0x44, 0x45, 0x31, 0x43, 0x30, 0xD}
+  {0x04, 0xA, 0x30, 0x31, 0x30, 0x44, 0x35, 0x44, 0x45, 0x31, 0x43, 0x30, 0xD},
+  {0x5, 0xA, 0x36, 0x30, 0x30, 0x30, 0x36, 0x31, 0x43, 0x39, 0x33, 0x35, 0xD}, //Sticker tags
+  {0x6, 0xA, 0x36, 0x30, 0x30, 0x30, 0x36, 0x31, 0x45, 0x38, 0x32, 0x30, 0xD},
+  {0x7, 0xA, 0x36, 0x30, 0x30, 0x30, 0x36, 0x31, 0x42, 0x30, 0x38, 0x41, 0xD},
+  {0x8, 0xA, 0x36, 0x30, 0x30, 0x30, 0x36, 0x31, 0x45, 0x46, 0x44, 0x35, 0xD},
+  {0x9, 0xA, 0x36, 0x30, 0x30, 0x30, 0x36, 0x31, 0x46, 0x41, 0x39, 0x35, 0xD},
+  {0xA, 0xA, 0x36, 0x30, 0x30, 0x30, 0x36, 0x31, 0x43, 0x44, 0x45, 0x31, 0xD},
+  {0xB, 0xA, 0x36, 0x30, 0x30, 0x30, 0x36, 0x31, 0x46, 0x41, 0x43, 0x31, 0xD},
+  {0xC, 0xA, 0x36, 0x30, 0x30, 0x30, 0x36, 0x31, 0x35, 0x45, 0x30, 0x39, 0xD},
+  {0xD, 0xA, 0x36, 0x30, 0x30, 0x30, 0x36, 0x31, 0x41, 0x43, 0x45, 0x35, 0xD},
+  {0xE, 0xA, 0x36, 0x30, 0x30, 0x30, 0x36, 0x31, 0x45, 0x41, 0x31, 0x34, 0xD}, //End sticker tags
+  {0xF, 0xA, 0x30, 0x38, 0x30, 0x30, 0x32, 0x45, 0x34, 0x43, 0x30, 0x45, 0xD} //White card #2
 }; //Black circle
 
-const int num_tags_in_array = 4;
+const int num_tags_in_array = 15;
 
 /**
    Looks for match between current tag and stored tag ids.
