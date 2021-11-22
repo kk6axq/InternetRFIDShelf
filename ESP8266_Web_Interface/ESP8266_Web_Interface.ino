@@ -79,10 +79,14 @@ void loop(){
   }
 
   if(ss.available()>0){
+    while(ss.read() != 'a');
     inventory = ss.parseInt();
     ss.read();
     min_inventory = ss.parseInt(); 
-    Serial.print("Got ");
-    Serial.println(inventory);  
+    Serial.print("Got inventory ");
+    Serial.print(inventory);
+    Serial.print(" minimum ");
+    Serial.println(min_inventory);  
+    
   }
 }
