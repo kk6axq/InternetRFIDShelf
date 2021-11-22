@@ -1,9 +1,12 @@
+#include <SoftwareSerial.h>
+
 #define ENC_A 31
 #define ENC_B 33
 #define ENC_BUTTON 35
 #define MODE_ADD 0
 #define MODE_REMOVE 1
-int mode = MODE_ADD;
+#define MODE_HYBRID 2
+int mode = MODE_HYBRID;
 
 int count = 0;
 int min_inventory = 4;
@@ -12,6 +15,10 @@ int min_inventory = 4;
 #define RFID_1_ENABLE 42
 //Rear sensor enable pin
 #define RFID_2_ENABLE 44
+#define RFID_2_RX 66
+#define SCAN_TIME 500
+
+SoftwareSerial rfid2(RFID_2_RX, 3);
 
 //Adapted from https://raw.githubusercontent.com/ellensp/rrd-glcd-tester/master/rrd-glcd-test.ino
 #define DOGLCD_CS       16
@@ -39,7 +46,42 @@ byte inventory_status[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 byte inventory_items = 15;
 bool inventory_update = true;
 void loop() {
-  if (Serial.available() > 0) {
+
+  int inbound_tag = checkRFID2(); //Check for new tag being added
+  int outbound_tag = checkRFID1(); //Check for tag being removed
+
+  if (inbound_tag != -1) {
+    Serial.print("Scanning in tag ");
+    Serial.println(inbound_tag);
+    //New tag read
+    if (inventory_status[inbound_tag] != 1) {
+      inventory_update = true;
+      inventory_status[inbound_tag] = 1;
+    }
+  }
+
+  if (outbound_tag != -1) {
+    //Outbound tag read
+    if (inventory_status[outbound_tag] != 0) {
+      inventory_update = true;
+      inventory_status[outbound_tag] = 0;
+    }
+  }
+
+  if (inventory_update) {
+    inventory_update = false;
+    Serial.println("Inventory updated:");
+    count = 0;
+    for (int i = 0; i < inventory_items + 1; i++) {
+      count += inventory_status[i];
+    }
+    Serial.print(count);
+    Serial.println(" items");
+    sendInventory(count, min_inventory);
+    drawScreen(count);
+  }
+  /**
+    if (Serial.available() > 0) {
     byte b = Serial.read();
     if (b == 'a' || b == 'A') {
       Serial.println("Add mode");
@@ -48,9 +90,9 @@ void loop() {
       Serial.println("Remove mode");
       mode = MODE_REMOVE;
     }
-  }
-  int new_tag = checkRFID1();
-  if (new_tag != -1) {
+    }
+    int new_tag = checkRFID1();
+    if (new_tag != -1) {
     //A tag was scanned.
     if (mode == MODE_ADD) {
       if (inventory_status[new_tag] != 1) {
@@ -63,9 +105,9 @@ void loop() {
       }
       inventory_status[new_tag] = 0;
     }
-  }
+    }
 
-  if (inventory_update) {
+    if (inventory_update) {
     inventory_update = false;
     Serial.println("Inventory updated:");
     count = 0;
@@ -76,9 +118,9 @@ void loop() {
     Serial.println(" items");
     sendInventory(count, min_inventory);
     drawScreen(count);
-  }
+    }
 
-  if (digitalRead(ENC_BUTTON) == 0) {
+    if (digitalRead(ENC_BUTTON) == 0) {
     //Button pressed
     if (mode == MODE_REMOVE) {
       Serial.println("Add mode");
@@ -93,13 +135,14 @@ void loop() {
     }
     delay(15);
     while (digitalRead(ENC_BUTTON) == 0);
-  }
+    }
+  **/
 }
 
 
 void initRFID() {
   Serial3.begin(2400);
-  Serial2.begin(2400);
+  rfid2.begin(2400);
   pinMode(RFID_1_ENABLE, OUTPUT);
   digitalWrite(RFID_1_ENABLE, HIGH);
   pinMode(RFID_2_ENABLE, OUTPUT);
@@ -110,9 +153,10 @@ byte tag[13];
 
 //Front scanner
 int checkRFID1() {
-  //Enable the RFID sensor and give it 50ms to power up
+  //Enable the RFID sensor and give it time to power up
   digitalWrite(RFID_1_ENABLE, LOW);
-  delay(50);
+  Serial3.flush();
+  delay(SCAN_TIME);
   if (Serial3.available() >= 12) {
     Serial3.readBytes(tag, 12);
     Serial.print("Got tag on front scanner: ");
@@ -132,11 +176,12 @@ int checkRFID1() {
 }
 
 int checkRFID2() {
-  //Enable the RFID sensor and give it 50 ms to power up
+  //Enable the RFID sensor and give it time to power up
   digitalWrite(RFID_2_ENABLE, LOW);
-  delay(50);
-  if (Serial2.available() >= 12) {
-    Serial2.readBytes(tag, 12);
+  rfid2.flush();
+  delay(SCAN_TIME);
+  if (rfid2.available() >= 12) {
+    rfid2.readBytes(tag, 12);
     Serial.print("Got tag on rear scanner: ");
     for (int i = 0; i < 12; i++) {
       Serial.print(tag[i], HEX);
@@ -154,6 +199,7 @@ int checkRFID2() {
 }
 
 void sendInventory(int value, int min_inv) {
+  Serial1.print('a');
   Serial1.print(value);
   Serial1.print(",");
   Serial1.print(min_inv);
@@ -236,6 +282,6 @@ void drawScreen(int value) {
     u8g.drawStr(0, 34, "Inventory Status:");
     u8g.drawStr(0, 46, (value < min_inventory) ? "LOW" : "OK");
     u8g.drawStr(0, 58, "Mode:");
-    u8g.drawStr(50, 58, (mode == MODE_ADD) ? "ADD" : "REMOVE");
+    u8g.drawStr(50, 58, (mode == MODE_HYBRID) ? "HYBRID" : ((mode == MODE_ADD) ? "ADD" : "REMOVE"));
   } while (u8g.nextPage());
 }
